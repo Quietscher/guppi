@@ -20,6 +20,21 @@ A terminal UI for managing multiple git repositories.
 
 - [Go](https://go.dev/dl/) 1.21 or higher
 
+### Optional Dependencies
+
+For the lazygit integration (`s` key), install [lazygit](https://github.com/jesseduffield/lazygit):
+
+```bash
+# macOS (Homebrew)
+brew install lazygit
+
+# Ubuntu/Debian
+sudo apt install lazygit
+
+# Arch Linux
+sudo pacman -S lazygit
+```
+
 ### Build from Source
 
 ```bash
