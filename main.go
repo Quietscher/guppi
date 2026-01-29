@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.2.0"
+const version = "1.2.1"
 
 func getShellConfig() (string, string) {
 	shell := os.Getenv("SHELL")
