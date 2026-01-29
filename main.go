@@ -155,6 +155,7 @@ const (
 	configView
 	actionSelectView
 	errorView
+	settingsView
 )
 
 type switchAction int
@@ -212,6 +213,11 @@ type model struct {
 	cmdOutput     string          // command output
 	cmdViewport   viewport.Model  // viewport for command output
 	cmdRunning    bool            // is a command running
+
+	// Performance config
+	fetchMode      FetchMode // How to fetch repo status
+	settingsIndex  int       // Current selection in settings view
+	forceFullFetch bool      // Force full fetch on next scan (for ctrl+r)
 }
 
 type repoFoundMsg struct {
@@ -295,6 +301,7 @@ func initialModel(gitDir string) model {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	favorites := loadFavorites()
+	config := loadConfig()
 
 	// Create delegate with shared favorites map for instant updates
 	delegate := newRepoDelegate(favorites)
@@ -333,6 +340,7 @@ func initialModel(gitDir string) model {
 		dirInput:    ti,
 		cmdInput:    cmdInput,
 		cmdViewport: cmdVp,
+		fetchMode:   config.FetchMode,
 	}
 }
 
@@ -602,6 +610,44 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Handle settings view keys
+		if m.mode == settingsView {
+			switch msg.String() {
+			case "q", "esc":
+				m.mode = listView
+				return m, nil
+			case "up", "k":
+				if m.settingsIndex > 0 {
+					m.settingsIndex--
+				}
+				return m, nil
+			case "down", "j":
+				if m.settingsIndex < 2 { // 3 options: all, on-demand, favorites
+					m.settingsIndex++
+				}
+				return m, nil
+			case "enter", " ":
+				// Select fetch mode (radio button style)
+				config := loadConfig()
+				newMode := FetchMode(m.settingsIndex)
+				if m.fetchMode != newMode {
+					m.fetchMode = newMode
+					config.FetchMode = newMode
+					switch newMode {
+					case FetchAll:
+						m.statusMsg = "Fetch mode: All repos"
+					case FetchOnDemand:
+						m.statusMsg = "Fetch mode: On-demand (visible only)"
+					case FetchFavorites:
+						m.statusMsg = "Fetch mode: Favorites only"
+					}
+					saveConfigFull(config)
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.list.FilterState() == list.Filtering {
 			break
 		}
@@ -654,14 +700,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "r":
+			switch m.fetchMode {
+			case FetchOnDemand:
+				// On-demand: only refresh the selected repo
+				if item, ok := m.list.SelectedItem().(Repo); ok {
+					m.statusMsg = "Refreshing " + item.Name + "..."
+					return m, checkGitStatus(item.Path)
+				}
+				return m, nil
+			case FetchFavorites:
+				// Favorites: only refresh favorite repos
+				var cmds []tea.Cmd
+				count := 0
+				for _, repo := range m.repos {
+					if repo.IsFavorite {
+						cmds = append(cmds, checkGitStatus(repo.Path))
+						count++
+					}
+				}
+				if count > 0 {
+					m.statusMsg = fmt.Sprintf("Refreshing %d favorites...", count)
+					return m, tea.Batch(cmds...)
+				}
+				m.statusMsg = "No favorites to refresh"
+				return m, nil
+			default:
+				// Normal refresh: rescan all repos
+				m.scanning = true
+				m.repos = []Repo{}
+				// Save filter before clearing list
+				if m.list.FilterState() == list.FilterApplied {
+					m.savedFilter = m.list.FilterValue()
+				}
+				m.list.SetItems([]list.Item{})
+				m.statusMsg = "Scanning..."
+				return m, tea.Batch(m.spinner.Tick, scanForRepos(m.gitDir))
+			}
+
+		case "ctrl+r":
+			// Full refresh: rescan all repos (works in all modes)
 			m.scanning = true
 			m.repos = []Repo{}
+			m.forceFullFetch = true // Override fetch mode for this refresh
 			// Save filter before clearing list
 			if m.list.FilterState() == list.FilterApplied {
 				m.savedFilter = m.list.FilterValue()
 			}
 			m.list.SetItems([]list.Item{})
-			m.statusMsg = "Scanning..."
+			m.statusMsg = "Scanning all..."
 			return m, tea.Batch(m.spinner.Tick, scanForRepos(m.gitDir))
 
 		case "s":
@@ -754,6 +840,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.statusMsg = "No repos behind remote to pull"
 			}
+
+		case "S":
+			// Open settings view, highlight current mode
+			m.mode = settingsView
+			m.settingsIndex = int(m.fetchMode)
+			return m, nil
 		}
 
 	case spinner.TickMsg:
@@ -777,11 +869,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.savedFilter = ""
 		}
 
+		// Fetch status based on performance settings
 		var statusCmds []tea.Cmd
-		for _, repo := range m.repos {
-			statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+		if m.forceFullFetch {
+			// Full refresh requested (ctrl+r), fetch all regardless of mode
+			m.forceFullFetch = false
+			for _, repo := range m.repos {
+				statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+			}
+		} else {
+			switch m.fetchMode {
+			case FetchOnDemand:
+				// On-demand: don't fetch anything on startup, user presses 'r' to refresh selected
+			case FetchFavorites:
+				// Only fetch favorites
+				for _, repo := range m.repos {
+					if repo.IsFavorite {
+						statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+					}
+				}
+			default: // FetchAll
+				// Fetch all (default behavior)
+				for _, repo := range m.repos {
+					statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+				}
+			}
 		}
-		cmds = append(cmds, tea.Batch(statusCmds...))
+		if len(statusCmds) > 0 {
+			cmds = append(cmds, tea.Batch(statusCmds...))
+		}
 
 	case statusUpdatedMsg:
 		for i := range m.repos {
@@ -1021,6 +1137,7 @@ func (m *model) getFilteredRepos() []Repo {
 	return filtered
 }
 
+
 func (m model) View() string {
 	if m.mode == configView {
 		title := detailTitleStyle.Render("Configure Git Directory")
@@ -1204,6 +1321,41 @@ func (m model) View() string {
 		return title + "\n\n" + content + "\n\n" + help
 	}
 
+	if m.mode == settingsView {
+		title := detailTitleStyle.Render("Settings - Fetch Mode")
+
+		options := []struct {
+			name string
+			desc string
+		}{
+			{"Fetch all repos", "Fetch all on startup; 'r' refreshes all (default)"},
+			{"On-demand fetch", "No auto-fetch; 'r' refreshes selected, 'ctrl+r' refreshes all"},
+			{"Favorites only", "Fetch favorites on startup; 'r' refreshes favorites, 'ctrl+r' all"},
+		}
+
+		var optionsList strings.Builder
+		optionsList.WriteString("\n")
+		for i, opt := range options {
+			prefix := "  "
+			style := lipgloss.NewStyle()
+			if i == m.settingsIndex {
+				prefix = "> "
+				style = style.Bold(true).Foreground(lipgloss.Color("205"))
+			}
+
+			radio := "( )"
+			if FetchMode(i) == m.fetchMode {
+				radio = "(●)"
+			}
+
+			optionsList.WriteString(prefix + style.Render(radio+" "+opt.name) + "\n")
+			optionsList.WriteString("     " + helpStyle.Render(opt.desc) + "\n\n")
+		}
+
+		help := helpStyle.Render("↑/↓: select • enter/space: choose • esc: back")
+		return title + "\n" + optionsList.String() + help
+	}
+
 	// Build filter indicator
 	var filterIndicator string
 	if m.filterDirty || m.filterBehind {
@@ -1230,8 +1382,8 @@ func (m model) View() string {
 		status = filterIndicator
 	}
 
-	help := helpStyle.Render("s: lazygit • d: details • f: fav • p: pull • P: pull favs • A: pull behind • g: goto • c: config • r: refresh")
-	help2 := helpStyle.Render("1: filter dirty • 2: filter behind • 0: clear filters • /: search • q: quit")
+	help := helpStyle.Render("s: lazygit • d: details • f: fav • p: pull • P: pull favs • A: pull behind • g: goto • r/ctrl+r: refresh")
+	help2 := helpStyle.Render("1: filter dirty • 2: filter behind • 0: clear • /: search • c: config • S: settings • q: quit")
 
 	return m.list.View() + "\n" + status + "\n" + help + "\n" + help2
 }
@@ -1691,9 +1843,18 @@ func getConfigPath() string {
 	return filepath.Join(getConfigDir(), "config.json")
 }
 
+type FetchMode int
+
+const (
+	FetchAll        FetchMode = iota // Fetch all repos (default)
+	FetchOnDemand                    // Only fetch visible repos
+	FetchFavorites                   // Only fetch favorites
+)
+
 type Config struct {
-	GitDir        string `json:"gitDir"`
-	SetupComplete bool   `json:"setupComplete"`
+	GitDir        string    `json:"gitDir"`
+	SetupComplete bool      `json:"setupComplete"`
+	FetchMode     FetchMode `json:"fetchMode"` // How to fetch repo status
 }
 
 func loadConfig() Config {
@@ -2009,7 +2170,7 @@ func runFirstTimeSetup(force bool) bool {
 	return true
 }
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 func printHelp() {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
@@ -2037,15 +2198,25 @@ func printHelp() {
 	fmt.Println("  2         Filter: repos behind remote")
 	fmt.Println("  0         Clear filters")
 	fmt.Println("  /         Search repos")
-	fmt.Println("  r         Refresh")
+	fmt.Println("  r         Refresh (mode-aware: selected/favorites/all)")
+	fmt.Println("  ctrl+r    Full refresh (always refreshes all)")
 	fmt.Println("  c         Configure git directory")
+	fmt.Println("  S         Open settings (performance options)")
 	fmt.Println("  q         Quit")
 	fmt.Println()
 	fmt.Println("Key bindings (detail view):")
 	fmt.Println("  Tab       Switch pane (status/branches/command)")
 	fmt.Println("  Enter     Switch branch / Run command")
+	fmt.Println("  p         Pull remote branch to local")
+	fmt.Println("  x         Delete local-only branch")
+	fmt.Println("  X         Force delete local branch")
 	fmt.Println("  r         Refresh")
 	fmt.Println("  Esc       Back to list")
+	fmt.Println()
+	fmt.Println("Fetch Mode Settings (press S):")
+	fmt.Println("  Fetch all       Fetch status for all repos on startup (default)")
+	fmt.Println("  On-demand       No auto-fetch; press 'r' to refresh selected repo only")
+	fmt.Println("  Favorites only  Only fetch status for favorite repos on startup")
 }
 
 func main() {
