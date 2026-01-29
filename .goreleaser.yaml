@@ -1,0 +1,23 @@
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+brews:
+  - repository:
+      owner: Quietscher
+      name: homebrew-guppi
+    homepage: "https://github.com/Quietscher/guppi"
+    description: "TUI for managing multiple git repositories"
+    license: "MIT"
+    install: |
+      bin.install "guppi"
+    test: |
+      system "#{bin}/guppi", "--version"
