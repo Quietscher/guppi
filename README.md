@@ -147,6 +147,10 @@ Press `S` in the list view to choose how guppi fetches repository status. Useful
 
 All dependencies are under permissive licenses (MIT/BSD 3-Clause).
 
+## Uninstalling
+
+See [UNINSTALL.md](UNINSTALL.md) for complete removal instructions.
+
 ## License
 
 MIT
