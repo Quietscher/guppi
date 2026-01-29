@@ -2167,10 +2167,13 @@ func runFirstTimeSetup(force bool) bool {
 
 	fmt.Fprintln(os.Stderr, successStyle.Render("Setup complete! Starting guppi..."))
 	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Note: If 'guppi' doesn't work in new terminals, reload your shell:")
+	fmt.Fprintln(os.Stderr, dimStyle.Render("  source ~/.zshrc  (or ~/.bashrc)"))
+	fmt.Fprintln(os.Stderr)
 	return true
 }
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 func printHelp() {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
