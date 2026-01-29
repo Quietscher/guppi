@@ -21,6 +21,12 @@ A terminal UI for managing multiple git repositories.
 
 ## Installation
 
+```bash
+git clone git@github.com:Quietscher/guppi.git && cd guppi && go build -o guppi . && ./guppi --setup
+```
+
+Then reload your shell: `source ~/.zshrc` (or `~/.bashrc`)
+
 ### Prerequisites
 
 - [Go](https://go.dev/dl/) 1.21 or higher
@@ -44,7 +50,7 @@ sudo pacman -S lazygit
 
 ```bash
 # Clone the repository
-git clone https://github.com/Quietscher/guppi.git
+git clone git@github.com:Quietscher/guppi.git
 cd guppi
 
 # Build
