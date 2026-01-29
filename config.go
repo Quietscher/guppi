@@ -20,6 +20,7 @@ type Config struct {
 	GitDir        string    `json:"gitDir"`
 	SetupComplete bool      `json:"setupComplete"`
 	FetchMode     FetchMode `json:"fetchMode"`
+	BinaryPath    string    `json:"binaryPath,omitempty"`
 }
 
 // GroupsFile represents the groups storage format

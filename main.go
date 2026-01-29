@@ -89,6 +89,68 @@ func checkShellSetup() bool {
 	return strings.Contains(string(data), "guppi")
 }
 
+func getCurrentBinaryPath() string {
+	binaryPath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	binaryPath, _ = filepath.EvalSymlinks(binaryPath)
+	return binaryPath
+}
+
+func updateShellFunction() {
+	config := loadConfig()
+	currentPath := getCurrentBinaryPath()
+
+	// If no saved path or path hasn't changed, nothing to do
+	if config.BinaryPath == "" || config.BinaryPath == currentPath {
+		// Save current path if not set
+		if config.BinaryPath == "" && currentPath != "" {
+			config.BinaryPath = currentPath
+			saveConfigFull(config)
+		}
+		return
+	}
+
+	// Binary path changed - update shell function
+	rcPath, _ := getShellConfig()
+	data, err := os.ReadFile(rcPath)
+	if err != nil {
+		return
+	}
+
+	content := string(data)
+
+	// Check if old path is in the shell config
+	if !strings.Contains(content, config.BinaryPath) {
+		// Old path not found, just update config
+		config.BinaryPath = currentPath
+		saveConfigFull(config)
+		return
+	}
+
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	fmt.Fprintln(os.Stderr, "guppi binary location changed, updating shell function...")
+
+	// Replace old path with new path in shell config
+	newContent := strings.Replace(content, config.BinaryPath, currentPath, -1)
+
+	if err := os.WriteFile(rcPath, []byte(newContent), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating %s: %v\n", rcPath, err)
+		fmt.Fprintln(os.Stderr, "Run 'guppi --setup' to fix manually.")
+	} else {
+		fmt.Fprintln(os.Stderr, successStyle.Render("✓ Shell function updated"))
+		fmt.Fprintf(os.Stderr, dimStyle.Render("  Run: source %s\n"), rcPath)
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// Save new binary path
+	config.BinaryPath = currentPath
+	saveConfigFull(config)
+}
+
 func runFirstTimeSetup(force bool) bool {
 	config := loadConfig()
 	if config.SetupComplete && !force {
@@ -251,6 +313,7 @@ func runFirstTimeSetup(force bool) bool {
 
 	// Save config
 	config.SetupComplete = true
+	config.BinaryPath = getCurrentBinaryPath()
 	saveConfigFull(config)
 
 	fmt.Fprintln(os.Stderr, successStyle.Render("Setup complete! Starting guppi..."))
@@ -346,6 +409,9 @@ func main() {
 	if !runFirstTimeSetup(false) {
 		os.Exit(0)
 	}
+
+	// Check if binary path changed (e.g., installed via Homebrew after local build)
+	updateShellFunction()
 
 	// Priority: ENV > config file > default
 	config := loadConfig()
