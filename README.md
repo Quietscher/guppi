@@ -21,62 +21,32 @@ A terminal UI for managing multiple git repositories.
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap Quietscher/guppi
+brew install guppi
+```
+
+On first run, guppi will guide you through setup. Then reload your shell: `source ~/.zshrc`
+
+### Build from Source
+
+Requires [Go](https://go.dev/dl/) 1.21+
+
 ```bash
 git clone git@github.com:Quietscher/guppi.git && cd guppi && go build -o guppi . && ./guppi --setup
 ```
 
 Then reload your shell: `source ~/.zshrc` (or `~/.bashrc`)
 
-### Prerequisites
-
-- [Go](https://go.dev/dl/) 1.21 or higher
-
-### Optional Dependencies
+### Optional: lazygit Integration
 
 For the lazygit integration (`s` key), install [lazygit](https://github.com/jesseduffield/lazygit):
 
 ```bash
-# macOS (Homebrew)
 brew install lazygit
-
-# Ubuntu/Debian
-sudo apt install lazygit
-
-# Arch Linux
-sudo pacman -S lazygit
 ```
-
-### Build from Source
-
-```bash
-# Clone the repository
-git clone git@github.com:Quietscher/guppi.git
-cd guppi
-
-# Build
-go build -o guppi .
-
-# Run setup
-./guppi --setup
-```
-
-### Install to PATH (optional)
-
-```bash
-# Option 1: Copy to a directory in your PATH
-sudo cp guppi /usr/local/bin/
-
-# Option 2: Add the guppi directory to your PATH
-echo 'export PATH="$PATH:/path/to/guppi"' >> ~/.zshrc
-```
-
-### Setup Wizard
-
-The setup wizard will:
-1. Ask for your git repositories directory
-2. Add a shell function to your `.zshrc`/`.bashrc` for the goto feature
-
-After setup, run `source ~/.zshrc` (or restart your terminal) and use `guppi` from anywhere.
 
 ### Updating
 
