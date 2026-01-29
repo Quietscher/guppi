@@ -13,6 +13,7 @@ A terminal UI for managing multiple git repositories.
 - **Multi-pane Detail View** - See status, branches, and run commands in one view
 - **Lazygit Integration** - Open lazygit for any repo with one keypress
 - **Goto Feature** - Press `g` to cd into a repo directory
+- **Performance Settings** - Configurable on-demand fetching for large repo collections
 
 ## Installation
 
@@ -105,8 +106,10 @@ guppi --version    # Show version
 | `2` | Filter: repos behind remote |
 | `0` | Clear all filters |
 | `/` | Search repos by name |
-| `r` | Refresh |
+| `r` | Refresh (mode-aware: selected/favorites/all) |
+| `ctrl+r` | Full refresh (always refreshes all repos) |
 | `c` | Configure git directory |
+| `S` | Open settings (performance options) |
 | `q` | Quit |
 
 ### Detail View
@@ -141,8 +144,18 @@ guppi --version    # Show version
 
 Configuration is stored in `~/.config/guppi/`:
 
-- `config.json` - Settings (git directory, setup status)
+- `config.json` - Settings (git directory, performance options)
 - `favorites.json` - List of favorite repositories
+
+### Fetch Mode Settings
+
+Press `S` in the list view to choose how guppi fetches repository status. Useful when managing many repositories:
+
+| Mode | Description |
+|------|-------------|
+| Fetch all repos | Fetch all on startup; `r` refreshes all (default) |
+| On-demand fetch | No auto-fetch; `r` refreshes selected, `ctrl+r` refreshes all |
+| Favorites only | Fetch favorites on startup; `r` refreshes favorites, `ctrl+r` all |
 
 ## Dependencies
 
