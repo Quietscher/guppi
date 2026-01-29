@@ -4,6 +4,12 @@ A terminal UI for managing multiple git repositories.
 
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
 
+> **Stop running `git pull` in 20 different terminals.**
+>
+> guppi gives you a single view of all your repositories - see what's changed, what's behind, and pull updates in seconds. Perfect for the morning "sync everything" routine.
+
+![guppi demo](assets/demo.gif)
+
 ## Features
 
 - **Repository Overview** - View all repos with status, branch, and remote changes at a glance
@@ -113,6 +119,8 @@ guppi --version    # Show version
 | `q` | Quit |
 
 ### Detail View
+
+![detail view](assets/detail-view.gif)
 
 | Key | Action |
 |-----|--------|
