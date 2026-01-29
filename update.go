@@ -1017,7 +1017,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = errorView
 			m.viewport.SetContent(m.errorMsg)
 		} else {
+			filterText := ""
+			if m.list.FilterState() == list.FilterApplied {
+				filterText = m.list.FilterValue()
+			}
 			m.updateList()
+			if filterText != "" {
+				m.list.SetFilterText(filterText)
+			}
 			m.statusMsg = fmt.Sprintf("Pulled %s: %s", repoName, msg.shortResult)
 		}
 		cmds = append(cmds, checkGitStatus(msg.path))
