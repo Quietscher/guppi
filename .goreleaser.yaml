@@ -15,7 +15,7 @@ brews:
       owner: Quietscher
       name: homebrew-guppi
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    folder: Formula
+    directory: Formula
     homepage: "https://github.com/Quietscher/guppi"
     description: "TUI for managing multiple git repositories"
     license: "MIT"
