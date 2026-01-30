@@ -325,16 +325,16 @@ func (m model) View() string {
 	var help, help2 string
 	if m.currentGroup != nil {
 		// Inside a group - always showing repos
-		help = helpStyle.Render("s: lazygit • d: details • f: fav • p: pull • P: pull all • g: goto • r: refresh • a: add repos • x: remove")
-		help2 = helpStyle.Render("1: filter dirty • 2: filter behind • 0: clear • /: search • m: move repo • esc: back • q: quit")
+		help = helpStyle.Render("s: lazygit • d: details • o: open web • f: fav • p: pull • P: pull all • g: goto • r: refresh • x: remove")
+		help2 = helpStyle.Render("a: add repos • 1: dirty • 2: behind • 0: clear • /: search • m: move • esc: back • q: quit")
 	} else if _, isGroup := m.list.SelectedItem().(GroupItem); isGroup {
 		// Homepage with a group selected
 		help = helpStyle.Render("enter: open group • P: pull group • r: refresh group • e: rename • x: delete group • n: new group • /: search")
 		help2 = helpStyle.Render("A: pull behind • ctrl+r: refresh all • c: config • S: settings • q: quit")
 	} else {
 		// Homepage with a repo selected
-		help = helpStyle.Render("s: lazygit • d: details • f: fav • p: pull • P: pull favs • A: pull behind • g: goto • r/ctrl+r: refresh")
-		help2 = helpStyle.Render("n: new group • m: move repo • /: search • c: config • S: settings • q: quit")
+		help = helpStyle.Render("s: lazygit • d: details • o: open web • f: fav • p: pull • P: pull favs • g: goto • r/ctrl+r: refresh")
+		help2 = helpStyle.Render("A: pull behind • n: new group • m: move repo • /: search • c: config • S: settings • q: quit")
 	}
 
 	return m.list.View() + "\n" + status + "\n" + help + "\n" + help2

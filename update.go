@@ -757,6 +757,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 
+		case "o":
+			if item, ok := m.list.SelectedItem().(Repo); ok {
+				url, err := getRepoWebURL(item.Path)
+				if err != nil {
+					m.statusMsg = "No remote URL found"
+					return m, nil
+				}
+				if err := openInBrowser(url); err != nil {
+					m.statusMsg = "Failed to open browser"
+					return m, nil
+				}
+				m.statusMsg = "Opened " + url
+			}
+
 		case "d":
 			if item, ok := m.list.SelectedItem().(Repo); ok {
 				m.mode = detailView

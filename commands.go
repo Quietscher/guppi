@@ -459,3 +459,31 @@ func runCommand(path, command string) tea.Cmd {
 		}
 	}
 }
+
+func getRepoWebURL(path string) (string, error) {
+	cmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	url := strings.TrimSpace(string(output))
+
+	// Convert SSH URL to HTTPS
+	// git@github.com:user/repo.git -> https://github.com/user/repo
+	// git@gitlab.example.com:group/repo.git -> https://gitlab.example.com/group/repo
+	if strings.HasPrefix(url, "git@") {
+		url = strings.TrimPrefix(url, "git@")
+		url = strings.TrimSuffix(url, ".git")
+		url = strings.Replace(url, ":", "/", 1)
+		url = "https://" + url
+	} else if strings.HasPrefix(url, "https://") {
+		url = strings.TrimSuffix(url, ".git")
+	}
+
+	return url, nil
+}
+
+func openInBrowser(url string) error {
+	return exec.Command("open", url).Start()
+}
