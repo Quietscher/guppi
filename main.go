@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const version = "1.3.2"
+const version = "1.3.3"
 
 func getShellConfig() (string, string) {
 	shell := os.Getenv("SHELL")
@@ -37,15 +37,14 @@ func getShellConfig() (string, string) {
 func getShellFunction(shellType string) string {
 	gotoFile := getGotoFilePath()
 
-	// Get the actual binary path
+	// Get binary path - prefer symlink path over resolved Cellar path
 	binaryPath, err := os.Executable()
 	if err != nil {
 		// Fallback to command name (assumes it's in PATH)
 		binaryPath = "guppi"
-	} else {
-		// Resolve symlinks to get the real path
-		binaryPath, _ = filepath.EvalSymlinks(binaryPath)
 	}
+	// Don't resolve symlinks - keep /opt/homebrew/bin/guppi instead of
+	// /opt/homebrew/Cellar/guppi/x.y.z/bin/guppi so it survives upgrades
 
 	switch shellType {
 	case "fish":
