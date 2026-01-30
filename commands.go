@@ -16,27 +16,34 @@ func scanForRepos(gitDir string) tea.Cmd {
 	return func() tea.Msg {
 		var repos []Repo
 
-		entries, err := os.ReadDir(gitDir)
-		if err != nil {
-			return repoFoundMsg{repos: repos}
-		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
+		filepath.WalkDir(gitDir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil // Skip directories we can't read
 			}
 
-			path := filepath.Join(gitDir, entry.Name())
-			gitPath := filepath.Join(path, ".git")
-
-			if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
-				repos = append(repos, Repo{
-					Path:   path,
-					Name:   entry.Name(),
-					Status: StatusUnknown,
-				})
+			// Skip hidden directories (except the root)
+			if d.IsDir() && strings.HasPrefix(d.Name(), ".") && path != gitDir {
+				return filepath.SkipDir
 			}
-		}
+
+			// Check if this directory contains a .git folder
+			if d.IsDir() {
+				gitPath := filepath.Join(path, ".git")
+				if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
+					// Calculate relative name from gitDir
+					relPath, _ := filepath.Rel(gitDir, path)
+					repos = append(repos, Repo{
+						Path:   path,
+						Name:   relPath,
+						Status: StatusUnknown,
+					})
+					// Don't descend into git repos (no nested repos)
+					return filepath.SkipDir
+				}
+			}
+
+			return nil
+		})
 
 		return repoFoundMsg{repos: repos}
 	}
