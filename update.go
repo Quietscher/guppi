@@ -31,36 +31,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "q", "esc":
 				m.mode = listView
 				m.pullResults = nil
+				m.pullResultsCursor.Reset()
+				m.filesCache = make(map[string][]FileChange)
 				return m, nil
 			case "up", "k":
-				if m.pullResultsCursor > 0 {
-					m.pullResultsCursor--
+				// Move up within level, or go up a level if at top
+				maxItems := m.getPullResultsMaxItems()
+				if !m.pullResultsCursor.MoveUp() {
+					// At top of current level - go up a level
+					m.pullResultsCursor.GoUp()
 				}
+				_ = maxItems // used for bounds checking
 				return m, nil
 			case "down", "j":
-				if m.pullResultsCursor < len(m.pullResults)-1 {
-					m.pullResultsCursor++
-				}
+				maxItems := m.getPullResultsMaxItems()
+				m.pullResultsCursor.MoveDown(maxItems)
 				return m, nil
-			case "enter", " ":
-				// Toggle expand/collapse for current repo
-				if m.pullResultsCursor < len(m.pullResults) {
-					r := m.pullResults[m.pullResultsCursor]
-					m.pullExpanded[r.RepoPath] = !m.pullExpanded[r.RepoPath]
-				}
-				return m, nil
-			case "a":
-				// Expand/collapse all
-				allExpanded := true
-				for _, r := range m.pullResults {
-					if !m.pullExpanded[r.RepoPath] {
-						allExpanded = false
-						break
+			case "right", "enter", "l":
+				// Go deeper - fetch files if entering file level
+				if m.pullResultsCursor.Level == 1 {
+					// About to enter file level - fetch files if not cached
+					if m.pullResultsCursor.RepoIdx < len(m.pullResults) {
+						result := m.pullResults[m.pullResultsCursor.RepoIdx]
+						if m.pullResultsCursor.CommitIdx < len(result.Commits) {
+							commit := result.Commits[m.pullResultsCursor.CommitIdx]
+							cacheKey := result.RepoPath + ":" + commit.Hash
+							if _, ok := m.filesCache[cacheKey]; !ok {
+								// Fetch files synchronously (fast enough for single commit)
+								files, err := fetchFilesForCommit(result.RepoPath, commit.Hash)
+								if err == nil {
+									m.filesCache[cacheKey] = files
+								} else {
+									m.filesCache[cacheKey] = []FileChange{}
+								}
+							}
+						}
 					}
 				}
-				for _, r := range m.pullResults {
-					m.pullExpanded[r.RepoPath] = !allExpanded
-				}
+				m.pullResultsCursor.GoDeeper()
+				return m, nil
+			case "left", "h":
+				m.pullResultsCursor.GoUp()
 				return m, nil
 			}
 			return m, nil
@@ -1157,12 +1168,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Show results screen if enabled and there are results
 				if m.showPullResults && len(m.pullResults) > 0 {
 					m.mode = pullResultsView
-					m.pullResultsCursor = 0
-					m.pullExpanded = make(map[string]bool)
-					// Expand first repo by default
-					if len(m.pullResults) > 0 {
-						m.pullExpanded[m.pullResults[0].RepoPath] = true
-					}
+					m.pullResultsCursor.Reset()
+					m.filesCache = make(map[string][]FileChange)
 					m.statusMsg = ""
 				} else {
 					m.statusMsg = fmt.Sprintf("Pulled %s: %s", repoName, msg.shortResult)

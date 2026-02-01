@@ -68,12 +68,12 @@ type model struct {
 	ungroupedRepos []Repo            // repos not in current group for picker
 
 	// Pull results view
-	pullResults       []PullResultInfo  // results from last pull operation
-	pullResultsCursor int               // current selection in results
-	pullExpanded      map[string]bool   // which repos are expanded
-	pendingPulls      map[string]string // path -> HEAD before pull (for tracking commits)
-	showPullResults   bool              // config: show results screen
-	maxCommitsPerRepo int               // config: max commits shown per repo
+	pullResults       []PullResultInfo       // results from last pull operation
+	pullResultsCursor PullResultsCursor      // cursor position in tree (level, repo, commit, file)
+	filesCache        map[string][]FileChange // cache of files per commit (key: "repoPath:commitHash")
+	pendingPulls      map[string]string      // path -> HEAD before pull (for tracking commits)
+	showPullResults   bool                   // config: show results screen
+	maxCommitsPerRepo int                    // config: max commits shown per repo
 }
 
 func initialModel(gitDir string) model {
@@ -153,7 +153,7 @@ func initialModel(gitDir string) model {
 		groupsMap:         groupsMap,
 		groupInput:        groupInput,
 		pendingPulls:      make(map[string]string),
-		pullExpanded:      make(map[string]bool),
+		filesCache:        make(map[string][]FileChange),
 		showPullResults:   config.GetShowPullResults(),
 		maxCommitsPerRepo: config.GetMaxCommitsPerRepo(),
 	}
@@ -393,4 +393,28 @@ func (m *model) getFilteredRepos() []Repo {
 		filtered = append(filtered, repo)
 	}
 	return filtered
+}
+
+// getPullResultsMaxItems returns the number of items at the current cursor level
+func (m *model) getPullResultsMaxItems() int {
+	switch m.pullResultsCursor.Level {
+	case 0:
+		return len(m.pullResults)
+	case 1:
+		if m.pullResultsCursor.RepoIdx < len(m.pullResults) {
+			return len(m.pullResults[m.pullResultsCursor.RepoIdx].Commits)
+		}
+	case 2:
+		if m.pullResultsCursor.RepoIdx < len(m.pullResults) {
+			result := m.pullResults[m.pullResultsCursor.RepoIdx]
+			if m.pullResultsCursor.CommitIdx < len(result.Commits) {
+				commit := result.Commits[m.pullResultsCursor.CommitIdx]
+				cacheKey := result.RepoPath + ":" + commit.Hash
+				if files, ok := m.filesCache[cacheKey]; ok {
+					return len(files)
+				}
+			}
+		}
+	}
+	return 0
 }
