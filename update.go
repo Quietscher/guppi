@@ -311,25 +311,56 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "down", "j":
-				if m.settingsIndex < 2 {
+				if m.settingsIndex < 4 {
 					m.settingsIndex++
 				}
 				return m, nil
 			case "enter", " ":
 				config := loadConfig()
-				newMode := FetchMode(m.settingsIndex)
-				if m.fetchMode != newMode {
-					m.fetchMode = newMode
-					config.FetchMode = newMode
-					switch newMode {
-					case FetchAll:
-						m.statusMsg = "Fetch mode: All repos"
-					case FetchOnDemand:
-						m.statusMsg = "Fetch mode: On-demand (visible only)"
-					case FetchFavorites:
-						m.statusMsg = "Fetch mode: Favorites only"
+				if m.settingsIndex < 3 {
+					// Fetch mode options (0-2)
+					newMode := FetchMode(m.settingsIndex)
+					if m.fetchMode != newMode {
+						m.fetchMode = newMode
+						config.FetchMode = newMode
+						switch newMode {
+						case FetchAll:
+							m.statusMsg = "Fetch mode: All repos"
+						case FetchOnDemand:
+							m.statusMsg = "Fetch mode: On-demand (visible only)"
+						case FetchFavorites:
+							m.statusMsg = "Fetch mode: Favorites only"
+						}
+						saveConfigFull(config)
+					}
+				} else if m.settingsIndex == 3 {
+					// Toggle show pull results
+					m.showPullResults = !m.showPullResults
+					config.ShowPullResults = &m.showPullResults
+					if m.showPullResults {
+						m.statusMsg = "Pull results screen enabled"
+					} else {
+						m.statusMsg = "Pull results screen disabled"
 					}
 					saveConfigFull(config)
+				}
+				return m, nil
+			case "left", "h":
+				if m.settingsIndex == 4 && m.maxCommitsPerRepo > 1 {
+					m.maxCommitsPerRepo--
+					config := loadConfig()
+					config.MaxCommitsPerRepo = m.maxCommitsPerRepo
+					saveConfigFull(config)
+					m.statusMsg = fmt.Sprintf("Max commits: %d", m.maxCommitsPerRepo)
+				}
+				return m, nil
+			case "right", "l":
+				if m.settingsIndex == 4 && m.maxCommitsPerRepo < 20 {
+					m.maxCommitsPerRepo++
+					config := loadConfig()
+					config.MaxCommitsPerRepo = m.maxCommitsPerRepo
+					saveConfigFull(config)
+					m.statusMsg = fmt.Sprintf("Max commits: %d", m.maxCommitsPerRepo)
 				}
 				return m, nil
 			}

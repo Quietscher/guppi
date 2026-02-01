@@ -262,9 +262,13 @@ func (m model) View() string {
 	}
 
 	if m.mode == settingsView {
-		title := detailTitleStyle.Render("Settings - Fetch Mode")
+		title := detailTitleStyle.Render("Settings")
 
-		options := []struct {
+		var optionsList strings.Builder
+
+		// Fetch Mode section
+		optionsList.WriteString("\n" + branchStyle.Render("Fetch Mode") + "\n\n")
+		fetchOptions := []struct {
 			name string
 			desc string
 		}{
@@ -273,9 +277,7 @@ func (m model) View() string {
 			{"Favorites only", "Fetch favorites on startup; 'r' refreshes favorites, 'ctrl+r' all"},
 		}
 
-		var optionsList strings.Builder
-		optionsList.WriteString("\n")
-		for i, opt := range options {
+		for i, opt := range fetchOptions {
 			prefix := "  "
 			style := lipgloss.NewStyle()
 			if i == m.settingsIndex {
@@ -292,7 +294,34 @@ func (m model) View() string {
 			optionsList.WriteString("     " + helpStyle.Render(opt.desc) + "\n\n")
 		}
 
-		help := helpStyle.Render("↑/↓: select • enter/space: choose • esc: back")
+		// Pull Results section
+		optionsList.WriteString(branchStyle.Render("Pull Results") + "\n\n")
+
+		// Show pull results toggle (index 3)
+		prefix := "  "
+		style := lipgloss.NewStyle()
+		if m.settingsIndex == 3 {
+			prefix = "> "
+			style = style.Bold(true).Foreground(lipgloss.Color("205"))
+		}
+		toggle := "[ ]"
+		if m.showPullResults {
+			toggle = "[✓]"
+		}
+		optionsList.WriteString(prefix + style.Render(toggle+" Show pull results screen") + "\n")
+		optionsList.WriteString("     " + helpStyle.Render("Display summary after bulk pull operations") + "\n\n")
+
+		// Max commits per repo (index 4)
+		prefix = "  "
+		style = lipgloss.NewStyle()
+		if m.settingsIndex == 4 {
+			prefix = "> "
+			style = style.Bold(true).Foreground(lipgloss.Color("205"))
+		}
+		optionsList.WriteString(prefix + style.Render(fmt.Sprintf("Max commits per repo: %d", m.maxCommitsPerRepo)) + "\n")
+		optionsList.WriteString("     " + helpStyle.Render("←/→ to adjust, max commits shown in pull results") + "\n\n")
+
+		help := helpStyle.Render("↑/↓: select • enter/space: toggle • ←/→: adjust • esc: back")
 		return title + "\n" + optionsList.String() + help
 	}
 
@@ -373,7 +402,7 @@ func (m model) View() string {
 					for j, commit := range result.Commits {
 						if j >= maxCommits {
 							remaining := len(result.Commits) - maxCommits
-							list.WriteString(helpStyle.Render(fmt.Sprintf("       ... and %d more commits\n", remaining)))
+							list.WriteString(helpStyle.Render(fmt.Sprintf("       ... and %d more commits", remaining)) + "\n")
 							renderCount++
 							break
 						}
