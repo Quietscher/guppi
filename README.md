@@ -12,6 +12,8 @@ A terminal UI for managing multiple git repositories.
 
 - **Repository Overview** - View all repos with status, branch, and remote changes at a glance
 - **Bulk Operations** - Pull repos individually, all favorites, or all repos behind remote
+- **Pull Results Screen** - See what changed after pulling: commits, files, expandable per-repo details
+- **Groups** - Organize repos into custom groups for easier management
 - **Smart Filtering** - Filter by name, dirty repos, or repos with pending updates
 - **Branch Management** - Switch branches, create local tracking branches, delete local-only branches
 - **Multi-pane Detail View** - See status, branches, and run commands in one view
@@ -60,6 +62,7 @@ go build -o guppi .
 
 ```bash
 guppi              # Start the TUI
+gpi                # Short alias (same as guppi)
 guppi --setup      # Re-run setup wizard
 guppi --help       # Show help and key bindings
 guppi --version    # Show version
@@ -90,7 +93,35 @@ guppi --version    # Show version
 | `ctrl+r` | Full refresh (always refreshes all repos) |
 | `c` | Configure git directory |
 | `S` | Open settings (performance options) |
+| `n` | Create new group |
+| `m` | Move repo to group |
+| `o` | Open repo in browser |
 | `q` | Quit |
+
+### Groups
+
+Groups let you organize repos into folders. On the homepage, groups appear as folders you can enter.
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Enter group |
+| `n` | Create new group |
+| `e` | Rename group |
+| `x` | Delete group / Remove repo from group |
+| `a` | Add repos to current group |
+| `m` | Move repo to group |
+| `Esc` | Exit group (back to homepage) |
+
+### Pull Results Screen
+
+After pulling multiple repos, guppi shows a summary screen with expandable details per repo.
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` | Navigate repos |
+| `Enter/Space` | Expand/collapse commits |
+| `a` | Expand/collapse all |
+| `Esc` | Dismiss |
 
 ### Detail View
 
