@@ -487,3 +487,75 @@ func getRepoWebURL(path string) (string, error) {
 func openInBrowser(url string) error {
 	return exec.Command("open", url).Start()
 }
+
+// getHeadCommit returns the current HEAD commit hash
+func getHeadCommit(path string) string {
+	cmd := exec.Command("git", "-C", path, "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// getCommitsBetween returns commits between two refs
+func getCommitsBetween(path, oldRef, newRef string) []CommitInfo {
+	if oldRef == "" || newRef == "" || oldRef == newRef {
+		return nil
+	}
+
+	// Get commits with format: hash|subject|author|relative time
+	cmd := exec.Command("git", "-C", path, "log", "--pretty=format:%h|%s|%an|%ar", oldRef+".."+newRef)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.TrimSpace(string(output))
+	if lines == "" {
+		return nil
+	}
+
+	var commits []CommitInfo
+	for _, line := range strings.Split(lines, "\n") {
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) >= 4 {
+			commits = append(commits, CommitInfo{
+				Hash:    parts[0],
+				Message: parts[1],
+				Author:  parts[2],
+				Time:    parts[3],
+			})
+		}
+	}
+	return commits
+}
+
+// getFilesChangedCount returns number of files changed between two refs
+func getFilesChangedCount(path, oldRef, newRef string) int {
+	if oldRef == "" || newRef == "" || oldRef == newRef {
+		return 0
+	}
+
+	cmd := exec.Command("git", "-C", path, "diff", "--stat", oldRef+".."+newRef)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 {
+		return 0
+	}
+
+	// Last line contains summary like "5 files changed, 10 insertions(+), 3 deletions(-)"
+	lastLine := lines[len(lines)-1]
+	if strings.Contains(lastLine, "file") {
+		parts := strings.Fields(lastLine)
+		if len(parts) >= 1 {
+			count, _ := strconv.Atoi(parts[0])
+			return count
+		}
+	}
+	return 0
+}

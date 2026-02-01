@@ -103,10 +103,11 @@ const (
 	actionSelectView
 	errorView
 	settingsView
-	groupInputView    // text input for group name (new/rename)
-	groupDeleteView   // confirm group deletion
-	groupSelectView   // select group to move repo to
-	groupAddReposView // select repos to add to group
+	groupInputView     // text input for group name (new/rename)
+	groupDeleteView    // confirm group deletion
+	groupSelectView    // select group to move repo to
+	groupAddReposView  // select repos to add to group
+	pullResultsView    // show results after pull operations
 )
 
 // switchAction represents actions for handling uncommitted changes
@@ -195,4 +196,25 @@ type lazygitExitMsg struct {
 type cmdResultMsg struct {
 	output string
 	err    error
+}
+
+// Pull results screen types
+
+type CommitInfo struct {
+	Hash    string
+	Message string
+	Author  string
+	Time    string // relative, e.g. "2 hours ago"
+}
+
+type PullResultInfo struct {
+	RepoPath     string
+	RepoName     string
+	Commits      []CommitInfo
+	FilesChanged int
+	Updated      bool // true if actually pulled new commits
+}
+
+type pullResultsReadyMsg struct {
+	results []PullResultInfo
 }

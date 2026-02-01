@@ -296,6 +296,115 @@ func (m model) View() string {
 		return title + "\n" + optionsList.String() + help
 	}
 
+	if m.mode == pullResultsView {
+		title := detailTitleStyle.Render("Pull Results")
+
+		// Calculate summary stats
+		totalCommits := 0
+		totalFiles := 0
+		updatedRepos := 0
+		for _, r := range m.pullResults {
+			if r.Updated {
+				updatedRepos++
+				totalCommits += len(r.Commits)
+				totalFiles += r.FilesChanged
+			}
+		}
+
+		summary := successStyle.Render(fmt.Sprintf("%d repos updated • %d commits • %d files changed",
+			updatedRepos, totalCommits, totalFiles))
+
+		// Render repo list with expandable commits
+		var list strings.Builder
+		maxShow := m.height - 10
+		if maxShow < 5 {
+			maxShow = 5
+		}
+
+		// Calculate visible range
+		visibleIdx := 0
+		startRender := false
+		renderCount := 0
+
+		for i, result := range m.pullResults {
+			// Check if we should start rendering (scroll handling)
+			if visibleIdx >= m.pullResultsCursor-maxShow/2 {
+				startRender = true
+			}
+
+			if startRender && renderCount < maxShow {
+				prefix := "  "
+				style := lipgloss.NewStyle()
+				if i == m.pullResultsCursor {
+					prefix = "> "
+					style = style.Bold(true).Foreground(lipgloss.Color("205"))
+				}
+
+				// Repo line with expand indicator
+				expandIcon := "▶"
+				if m.pullExpanded[result.RepoPath] {
+					expandIcon = "▼"
+				}
+
+				statusIcon := "✓"
+				statusStyle := statusCleanStyle
+				if !result.Updated {
+					statusIcon = "−"
+					statusStyle = helpStyle
+				}
+
+				repoLine := fmt.Sprintf("%s %s %s", expandIcon, statusIcon, result.RepoName)
+				if result.Updated {
+					repoLine += fmt.Sprintf(" (%d commits, %d files)", len(result.Commits), result.FilesChanged)
+				} else {
+					repoLine = fmt.Sprintf("%s %s %s (up to date)", expandIcon, statusIcon, result.RepoName)
+				}
+
+				if i == m.pullResultsCursor {
+					list.WriteString(prefix + style.Render(repoLine) + "\n")
+				} else {
+					list.WriteString(prefix + statusStyle.Render(repoLine) + "\n")
+				}
+				renderCount++
+
+				// Show commits if expanded
+				if m.pullExpanded[result.RepoPath] && result.Updated {
+					maxCommits := m.maxCommitsPerRepo
+					for j, commit := range result.Commits {
+						if j >= maxCommits {
+							remaining := len(result.Commits) - maxCommits
+							list.WriteString(helpStyle.Render(fmt.Sprintf("       ... and %d more commits\n", remaining)))
+							renderCount++
+							break
+						}
+						commitLine := fmt.Sprintf("       %s %s", commit.Hash, commit.Message)
+						if len(commitLine) > 70 {
+							commitLine = commitLine[:67] + "..."
+						}
+						list.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(commitLine) + "\n")
+						renderCount++
+						if renderCount >= maxShow {
+							break
+						}
+					}
+				}
+			}
+			visibleIdx++
+
+			if renderCount >= maxShow {
+				break
+			}
+		}
+
+		if len(m.pullResults) == 0 {
+			list.WriteString(helpStyle.Render("  No pull results to show"))
+		}
+
+		help := helpStyle.Render("↑/↓: navigate • enter/space: expand/collapse • a: expand all • esc: back")
+
+		return title + "\n\n" + summary + "\n\n" + list.String() + "\n" + help
+	}
+
 	// Build filter indicator
 	var filterIndicator string
 	if m.filterDirty || m.filterBehind {

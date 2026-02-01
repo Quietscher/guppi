@@ -17,10 +17,26 @@ const (
 
 // Config holds application configuration
 type Config struct {
-	GitDir        string    `json:"gitDir"`
-	SetupComplete bool      `json:"setupComplete"`
-	FetchMode     FetchMode `json:"fetchMode"`
-	BinaryPath    string    `json:"binaryPath,omitempty"`
+	GitDir            string    `json:"gitDir"`
+	SetupComplete     bool      `json:"setupComplete"`
+	FetchMode         FetchMode `json:"fetchMode"`
+	BinaryPath        string    `json:"binaryPath,omitempty"`
+	ShowPullResults   *bool     `json:"showPullResults,omitempty"`   // nil = true (default)
+	MaxCommitsPerRepo int       `json:"maxCommitsPerRepo,omitempty"` // 0 = 5 (default)
+}
+
+func (c Config) GetShowPullResults() bool {
+	if c.ShowPullResults == nil {
+		return true // default
+	}
+	return *c.ShowPullResults
+}
+
+func (c Config) GetMaxCommitsPerRepo() int {
+	if c.MaxCommitsPerRepo <= 0 {
+		return 5 // default
+	}
+	return c.MaxCommitsPerRepo
 }
 
 // GroupsFile represents the groups storage format

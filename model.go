@@ -66,6 +66,14 @@ type model struct {
 	groupIndex     int               // selection in group picker
 	addRepoIndex   int               // selection in add repos picker
 	ungroupedRepos []Repo            // repos not in current group for picker
+
+	// Pull results view
+	pullResults       []PullResultInfo  // results from last pull operation
+	pullResultsCursor int               // current selection in results
+	pullExpanded      map[string]bool   // which repos are expanded
+	pendingPulls      map[string]string // path -> HEAD before pull (for tracking commits)
+	showPullResults   bool              // config: show results screen
+	maxCommitsPerRepo int               // config: max commits shown per repo
 }
 
 func initialModel(gitDir string) model {
@@ -102,6 +110,7 @@ func initialModel(gitDir string) model {
 	l.Title = "guppi - Git Repository Manager"
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
+	l.SetShowHelp(false) // We provide custom help below
 	l.Styles.Title = titleStyle
 
 	vp := viewport.New(80, 20)
@@ -127,22 +136,26 @@ func initialModel(gitDir string) model {
 	cmdVp := viewport.New(80, 10)
 
 	return model{
-		list:        l,
-		delegate:    &delegate,
-		repos:       []Repo{},
-		favorites:   favorites,
-		scanning:    true,
-		spinner:     s,
-		gitDir:      gitDir,
-		mode:        listView,
-		viewport:    vp,
-		dirInput:    ti,
-		cmdInput:    cmdInput,
-		cmdViewport: cmdVp,
-		fetchMode:   config.FetchMode,
-		groups:      groups,
-		groupsMap:   groupsMap,
-		groupInput:  groupInput,
+		list:              l,
+		delegate:          &delegate,
+		repos:             []Repo{},
+		favorites:         favorites,
+		scanning:          true,
+		spinner:           s,
+		gitDir:            gitDir,
+		mode:              listView,
+		viewport:          vp,
+		dirInput:          ti,
+		cmdInput:          cmdInput,
+		cmdViewport:       cmdVp,
+		fetchMode:         config.FetchMode,
+		groups:            groups,
+		groupsMap:         groupsMap,
+		groupInput:        groupInput,
+		pendingPulls:      make(map[string]string),
+		pullExpanded:      make(map[string]bool),
+		showPullResults:   config.GetShowPullResults(),
+		maxCommitsPerRepo: config.GetMaxCommitsPerRepo(),
 	}
 }
 

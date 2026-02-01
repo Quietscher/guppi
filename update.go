@@ -25,6 +25,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - 8
 
 	case tea.KeyMsg:
+		// Handle pull results view keys
+		if m.mode == pullResultsView {
+			switch msg.String() {
+			case "q", "esc":
+				m.mode = listView
+				m.pullResults = nil
+				return m, nil
+			case "up", "k":
+				if m.pullResultsCursor > 0 {
+					m.pullResultsCursor--
+				}
+				return m, nil
+			case "down", "j":
+				if m.pullResultsCursor < len(m.pullResults)-1 {
+					m.pullResultsCursor++
+				}
+				return m, nil
+			case "enter", " ":
+				// Toggle expand/collapse for current repo
+				if m.pullResultsCursor < len(m.pullResults) {
+					r := m.pullResults[m.pullResultsCursor]
+					m.pullExpanded[r.RepoPath] = !m.pullExpanded[r.RepoPath]
+				}
+				return m, nil
+			case "a":
+				// Expand/collapse all
+				allExpanded := true
+				for _, r := range m.pullResults {
+					if !m.pullExpanded[r.RepoPath] {
+						allExpanded = false
+						break
+					}
+				}
+				for _, r := range m.pullResults {
+					m.pullExpanded[r.RepoPath] = !allExpanded
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		// Handle config view keys
 		if m.mode == configView {
 			switch msg.String() {
@@ -565,15 +606,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if item, ok := m.list.SelectedItem().(Repo); ok {
 				m.pulling = true
 				m.statusMsg = "Pulling " + item.Name + "..."
+				// Capture HEAD before pull for results tracking
+				m.pendingPulls[item.Path] = getHeadCommit(item.Path)
+				m.pullResults = nil // Clear previous results
 				return m, tea.Batch(m.spinner.Tick, pullRepo(item.Path))
 			}
 
 		case "P":
+			// Clear previous results
+			m.pullResults = nil
+			m.pendingPulls = make(map[string]string)
+
 			// Inside a group: pull all repos in that group
 			if m.currentGroup != nil {
 				repos := m.getGroupRepos(m.currentGroup.Name)
 				var pullCmds []tea.Cmd
 				for _, repo := range repos {
+					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
 					pullCmds = append(pullCmds, pullRepo(repo.Path))
 				}
 				if len(pullCmds) > 0 {
@@ -590,6 +639,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				repos := m.getGroupRepos(group.Name)
 				var pullCmds []tea.Cmd
 				for _, repo := range repos {
+					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
 					pullCmds = append(pullCmds, pullRepo(repo.Path))
 				}
 				if len(pullCmds) > 0 {
@@ -606,6 +656,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			count := 0
 			for _, repo := range m.repos {
 				if repo.IsFavorite {
+					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
 					pullCmds = append(pullCmds, pullRepo(repo.Path))
 					count++
 				}
@@ -828,11 +879,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Filters cleared"
 
 		case "A":
+			// Clear previous results
+			m.pullResults = nil
+			m.pendingPulls = make(map[string]string)
+
 			filtered := m.getFilteredRepos()
 			var pullCmds []tea.Cmd
 			count := 0
 			for _, repo := range filtered {
 				if repo.BehindCount > 0 {
+					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
 					pullCmds = append(pullCmds, pullRepo(repo.Path))
 					count++
 				}
@@ -1007,7 +1063,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case pullCompleteMsg:
-		m.pulling = false
 		repoName := filepath.Base(msg.path)
 		for i := range m.repos {
 			if m.repos[i].Path == msg.path {
@@ -1021,6 +1076,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+
+		// Collect pull results for results screen
+		if oldHead, ok := m.pendingPulls[msg.path]; ok {
+			delete(m.pendingPulls, msg.path)
+
+			if msg.err == nil && !strings.Contains(msg.result, "Already up to date") {
+				newHead := getHeadCommit(msg.path)
+				commits := getCommitsBetween(msg.path, oldHead, newHead)
+				filesChanged := getFilesChangedCount(msg.path, oldHead, newHead)
+
+				if len(commits) > 0 {
+					m.pullResults = append(m.pullResults, PullResultInfo{
+						RepoPath:     msg.path,
+						RepoName:     repoName,
+						Commits:      commits,
+						FilesChanged: filesChanged,
+						Updated:      true,
+					})
+				}
+			}
+		}
+
+		// Check if all pulls are done
+		allDone := len(m.pendingPulls) == 0
+
 		if msg.err != nil {
 			m.statusMsg = ""
 			m.errorMsg = fmt.Sprintf("Pull failed for %s:\n\n%s", repoName, msg.result)
@@ -1030,6 +1110,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.mode = errorView
 			m.viewport.SetContent(m.errorMsg)
+			m.pulling = !allDone
 		} else {
 			filterText := ""
 			if m.list.FilterState() == list.FilterApplied {
@@ -1039,7 +1120,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if filterText != "" {
 				m.list.SetFilterText(filterText)
 			}
-			m.statusMsg = fmt.Sprintf("Pulled %s: %s", repoName, msg.shortResult)
+
+			if allDone {
+				m.pulling = false
+				// Show results screen if enabled and there are results
+				if m.showPullResults && len(m.pullResults) > 0 {
+					m.mode = pullResultsView
+					m.pullResultsCursor = 0
+					m.pullExpanded = make(map[string]bool)
+					// Expand first repo by default
+					if len(m.pullResults) > 0 {
+						m.pullExpanded[m.pullResults[0].RepoPath] = true
+					}
+					m.statusMsg = ""
+				} else {
+					m.statusMsg = fmt.Sprintf("Pulled %s: %s", repoName, msg.shortResult)
+				}
+			} else {
+				m.statusMsg = fmt.Sprintf("Pulled %s: %s", repoName, msg.shortResult)
+			}
 		}
 		cmds = append(cmds, checkGitStatus(msg.path))
 
