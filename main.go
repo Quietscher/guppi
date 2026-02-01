@@ -60,6 +60,7 @@ function guppi
     end
   end
 end
+alias gpi guppi
 `, binaryPath, gotoFile, gotoFile, gotoFile)
 	default: // bash/zsh
 		return fmt.Sprintf(`
@@ -75,6 +76,7 @@ guppi() {
     fi
   fi
 }
+alias gpi=guppi
 `, binaryPath, gotoFile, gotoFile, gotoFile)
 	}
 }

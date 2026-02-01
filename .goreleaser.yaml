@@ -21,5 +21,6 @@ brews:
     license: "MIT"
     install: |
       bin.install "guppi"
+      bin.install_symlink "guppi" => "gpi"
     test: |
       system "#{bin}/guppi", "--version"
