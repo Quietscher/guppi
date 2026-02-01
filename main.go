@@ -37,9 +37,8 @@ func getShellConfig() (string, string) {
 func getShellFunction(shellType string) string {
 	gotoFile := getGotoFilePath()
 
-	// Use command name instead of absolute path - survives Homebrew upgrades
-	// since /opt/homebrew/bin is in PATH and the symlink always points to current version
-	binaryPath := "guppi"
+	// Use "command guppi" to call the binary, not the shell function (avoids recursion)
+	binaryPath := "command guppi"
 
 	switch shellType {
 	case "fish":
@@ -85,7 +84,7 @@ func checkShellSetup() bool {
 	return strings.Contains(string(data), "guppi()")
 }
 
-// checkShellNeedsUpdate returns true if the shell function has a hardcoded path
+// checkShellNeedsUpdate returns true if the shell function has issues needing update
 func checkShellNeedsUpdate() bool {
 	rcPath, _ := getShellConfig()
 	data, err := os.ReadFile(rcPath)
@@ -93,9 +92,23 @@ func checkShellNeedsUpdate() bool {
 		return false
 	}
 	content := string(data)
-	return strings.Contains(content, "guppi()") &&
-		(strings.Contains(content, "/Cellar/guppi/") ||
-			strings.Contains(content, "/bin/guppi"))
+	if !strings.Contains(content, "guppi()") {
+		return false
+	}
+	// Check for hardcoded paths
+	if strings.Contains(content, "/Cellar/guppi/") || strings.Contains(content, "/bin/guppi") {
+		return true
+	}
+	// Check for recursive call (guppi without "command" prefix)
+	// Look for the pattern: guppi() { followed by just "guppi" without "command"
+	if strings.Contains(content, "guppi()") && !strings.Contains(content, "command guppi") {
+		return true
+	}
+	// Check for missing gpi alias
+	if !strings.Contains(content, "alias gpi") {
+		return true
+	}
+	return false
 }
 
 // updateShellFunctionInPlace replaces the old guppi function with the new one
