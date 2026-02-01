@@ -82,7 +82,107 @@ func checkShellSetup() bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(data), "guppi")
+	return strings.Contains(string(data), "guppi()")
+}
+
+// checkShellNeedsUpdate returns true if the shell function has a hardcoded path
+func checkShellNeedsUpdate() bool {
+	rcPath, _ := getShellConfig()
+	data, err := os.ReadFile(rcPath)
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	return strings.Contains(content, "guppi()") &&
+		(strings.Contains(content, "/Cellar/guppi/") ||
+			strings.Contains(content, "/bin/guppi"))
+}
+
+// updateShellFunctionInPlace replaces the old guppi function with the new one
+func updateShellFunctionInPlace() error {
+	rcPath, shellType := getShellConfig()
+	data, err := os.ReadFile(rcPath)
+	if err != nil {
+		return err
+	}
+
+	content := string(data)
+	newFunc := getShellFunction(shellType)
+
+	// Find function start - look for "guppi() {" or "function guppi"
+	var startMarker string
+	if shellType == "fish" {
+		startMarker = "function guppi"
+	} else {
+		startMarker = "guppi() {"
+	}
+
+	startIdx := strings.Index(content, startMarker)
+	if startIdx == -1 {
+		return fmt.Errorf("function not found")
+	}
+
+	// Include comment line before function if present
+	if startIdx > 0 {
+		beforeFunc := content[:startIdx]
+		lastNewline := strings.LastIndex(beforeFunc, "\n")
+		if lastNewline != -1 {
+			prevLine := strings.TrimSpace(beforeFunc[lastNewline:])
+			if strings.HasPrefix(prevLine, "# guppi") {
+				startIdx = lastNewline + 1
+			}
+		}
+	}
+
+	// Find end of function block
+	endIdx := startIdx
+	remaining := content[startIdx:]
+	lines := strings.Split(remaining, "\n")
+	braceCount := 0
+	foundEnd := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if strings.Contains(line, "{") {
+			braceCount++
+		}
+		if strings.Contains(line, "}") {
+			braceCount--
+			if braceCount == 0 {
+				// End of function
+				endIdx = startIdx
+				for j := 0; j <= i; j++ {
+					endIdx += len(lines[j]) + 1
+				}
+				// Check for alias line after
+				if i+1 < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i+1]), "alias gpi") {
+					endIdx += len(lines[i+1]) + 1
+				}
+				foundEnd = true
+				break
+			}
+		}
+		if shellType == "fish" && trimmed == "end" {
+			endIdx = startIdx
+			for j := 0; j <= i; j++ {
+				endIdx += len(lines[j]) + 1
+			}
+			if i+1 < len(lines) && strings.HasPrefix(strings.TrimSpace(lines[i+1]), "alias gpi") {
+				endIdx += len(lines[i+1]) + 1
+			}
+			foundEnd = true
+			break
+		}
+	}
+
+	if !foundEnd {
+		return fmt.Errorf("could not find end of function")
+	}
+
+	// Replace old function with new
+	newContent := content[:startIdx] + newFunc + content[endIdx:]
+	return os.WriteFile(rcPath, []byte(newContent), 0644)
 }
 
 func getCurrentBinaryPath() string {
@@ -274,7 +374,24 @@ func runFirstTimeSetup(force bool) bool {
 
 	// Step 2: Shell function setup
 	fmt.Fprintln(os.Stderr, titleStyle.Render("Step 2: Shell Integration"))
-	if shellAlreadySetup {
+	if shellAlreadySetup && checkShellNeedsUpdate() {
+		fmt.Fprintln(os.Stderr, "Existing shell function needs updating (has hardcoded path).")
+		fmt.Fprintf(os.Stderr, "Update in %s? [Y/n] ", rcPath)
+
+		var response string
+		fmt.Scanln(&response)
+		response = strings.ToLower(strings.TrimSpace(response))
+
+		if response == "" || response == "y" || response == "yes" {
+			if err := updateShellFunctionInPlace(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error updating: %v\n", err)
+				fmt.Fprintln(os.Stderr, dimStyle.Render("You may need to manually update the function."))
+			} else {
+				fmt.Fprintln(os.Stderr, successStyle.Render("✓ Shell function updated"))
+				fmt.Fprintf(os.Stderr, dimStyle.Render("  Run: source %s\n"), rcPath)
+			}
+		}
+	} else if shellAlreadySetup {
 		fmt.Fprintln(os.Stderr, successStyle.Render("✓ Already configured in "+rcPath))
 	} else {
 		fmt.Fprintln(os.Stderr, "To enable 'goto' feature (press 'g' to cd into a repo),")
