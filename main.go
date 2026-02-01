@@ -37,14 +37,9 @@ func getShellConfig() (string, string) {
 func getShellFunction(shellType string) string {
 	gotoFile := getGotoFilePath()
 
-	// Get binary path - prefer symlink path over resolved Cellar path
-	binaryPath, err := os.Executable()
-	if err != nil {
-		// Fallback to command name (assumes it's in PATH)
-		binaryPath = "guppi"
-	}
-	// Don't resolve symlinks - keep /opt/homebrew/bin/guppi instead of
-	// /opt/homebrew/Cellar/guppi/x.y.z/bin/guppi so it survives upgrades
+	// Use command name instead of absolute path - survives Homebrew upgrades
+	// since /opt/homebrew/bin is in PATH and the symlink always points to current version
+	binaryPath := "guppi"
 
 	switch shellType {
 	case "fish":
