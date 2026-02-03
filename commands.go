@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -558,4 +559,14 @@ func getFilesChangedCount(path, oldRef, newRef string) int {
 		}
 	}
 	return 0
+}
+
+// delayedBatchOperation sends a batchOperationMsg after a delay
+func delayedBatchOperation(paths []string, operation string, delayMs int) tea.Cmd {
+	return func() tea.Msg {
+		if delayMs > 0 {
+			time.Sleep(time.Duration(delayMs) * time.Millisecond)
+		}
+		return batchOperationMsg{paths: paths, operation: operation}
+	}
 }

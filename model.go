@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -74,6 +75,14 @@ type model struct {
 	pendingPulls      map[string]string      // path -> HEAD before pull (for tracking commits)
 	showPullResults   bool                   // config: show results screen
 	maxCommitsPerRepo int                    // config: max commits shown per repo
+
+	// Progress tracking
+	progress      progress.Model // progress bar
+	progressTotal int            // total operations in current batch
+	progressDone  int            // completed operations
+	batchPaths    []string       // paths remaining in current batch operation
+	batchOp       string         // current batch operation type ("fetch" or "pull")
+	fetchDelayMs  int            // delay between fetch/pull operations (ms)
 }
 
 func initialModel(gitDir string) model {
@@ -135,6 +144,10 @@ func initialModel(gitDir string) model {
 
 	cmdVp := viewport.New(80, 10)
 
+	// Progress bar
+	prog := progress.New(progress.WithDefaultGradient())
+	prog.Width = 30
+
 	return model{
 		list:              l,
 		delegate:          &delegate,
@@ -156,6 +169,8 @@ func initialModel(gitDir string) model {
 		filesCache:        make(map[string][]FileChange),
 		showPullResults:   config.GetShowPullResults(),
 		maxCommitsPerRepo: config.GetMaxCommitsPerRepo(),
+		progress:          prog,
+		fetchDelayMs:      config.GetFetchDelayMs(),
 	}
 }
 

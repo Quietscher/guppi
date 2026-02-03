@@ -321,6 +321,19 @@ func (m model) View() string {
 		optionsList.WriteString(prefix + style.Render(fmt.Sprintf("Max commits per repo: %d", m.maxCommitsPerRepo)) + "\n")
 		optionsList.WriteString("     " + helpStyle.Render("←/→ to adjust, max commits shown in pull results") + "\n\n")
 
+		// Performance section
+		optionsList.WriteString(branchStyle.Render("Performance") + "\n\n")
+
+		// Fetch delay (index 5)
+		prefix = "  "
+		style = lipgloss.NewStyle()
+		if m.settingsIndex == 5 {
+			prefix = "> "
+			style = style.Bold(true).Foreground(lipgloss.Color("205"))
+		}
+		optionsList.WriteString(prefix + style.Render(fmt.Sprintf("Fetch/pull delay: %dms", m.fetchDelayMs)) + "\n")
+		optionsList.WriteString("     " + helpStyle.Render("←/→ to adjust, delay between operations (0-500ms)") + "\n\n")
+
 		help := helpStyle.Render("↑/↓: select • enter/space: toggle • ←/→: adjust • esc: back")
 		return title + "\n" + optionsList.String() + help
 	}
@@ -346,7 +359,19 @@ func (m model) View() string {
 	if m.scanning {
 		status = m.spinner.View() + " Scanning for repositories..."
 	} else if m.pulling {
-		status = m.spinner.View() + " " + m.statusMsg
+		// Show progress bar for pull operations
+		percent := 0
+		if m.progressTotal > 0 {
+			percent = (m.progressDone * 100) / m.progressTotal
+		}
+		status = m.spinner.View() + " " + m.statusMsg + " " + m.progress.View() + fmt.Sprintf(" %d%%", percent)
+	} else if m.batchOp == "fetch" && m.progressTotal > 0 {
+		// Show progress bar for fetch operations
+		percent := 0
+		if m.progressTotal > 0 {
+			percent = (m.progressDone * 100) / m.progressTotal
+		}
+		status = m.statusMsg + " " + m.progress.View() + fmt.Sprintf(" %d%%", percent)
 	} else if m.errorMsg != "" {
 		status = statusErrorStyle.Render(m.errorMsg)
 	} else if m.statusMsg != "" {
