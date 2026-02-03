@@ -321,19 +321,6 @@ func (m model) View() string {
 		optionsList.WriteString(prefix + style.Render(fmt.Sprintf("Max commits per repo: %d", m.maxCommitsPerRepo)) + "\n")
 		optionsList.WriteString("     " + helpStyle.Render("←/→ to adjust, max commits shown in pull results") + "\n\n")
 
-		// Performance section
-		optionsList.WriteString(branchStyle.Render("Performance") + "\n\n")
-
-		// Fetch delay (index 5)
-		prefix = "  "
-		style = lipgloss.NewStyle()
-		if m.settingsIndex == 5 {
-			prefix = "> "
-			style = style.Bold(true).Foreground(lipgloss.Color("205"))
-		}
-		optionsList.WriteString(prefix + style.Render(fmt.Sprintf("Fetch/pull delay: %dms", m.fetchDelayMs)) + "\n")
-		optionsList.WriteString("     " + helpStyle.Render("←/→ to adjust, delay between operations (0-500ms)") + "\n\n")
-
 		help := helpStyle.Render("↑/↓: select • enter/space: toggle • ←/→: adjust • esc: back")
 		return title + "\n" + optionsList.String() + help
 	}

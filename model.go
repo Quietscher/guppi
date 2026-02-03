@@ -80,9 +80,7 @@ type model struct {
 	progress      progress.Model // progress bar
 	progressTotal int            // total operations in current batch
 	progressDone  int            // completed operations
-	batchPaths    []string       // paths remaining in current batch operation
 	batchOp       string         // current batch operation type ("fetch" or "pull")
-	fetchDelayMs  int            // delay between fetch/pull operations (ms)
 }
 
 func initialModel(gitDir string) model {
@@ -170,7 +168,6 @@ func initialModel(gitDir string) model {
 		showPullResults:   config.GetShowPullResults(),
 		maxCommitsPerRepo: config.GetMaxCommitsPerRepo(),
 		progress:          prog,
-		fetchDelayMs:      config.GetFetchDelayMs(),
 	}
 }
 

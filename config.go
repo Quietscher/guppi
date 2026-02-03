@@ -23,7 +23,6 @@ type Config struct {
 	BinaryPath        string    `json:"binaryPath,omitempty"`
 	ShowPullResults   *bool     `json:"showPullResults,omitempty"`   // nil = true (default)
 	MaxCommitsPerRepo int       `json:"maxCommitsPerRepo,omitempty"` // 0 = 5 (default)
-	FetchDelayMs      int       `json:"fetchDelayMs,omitempty"`      // 0 = 50 (default), delay between fetch/pull operations
 }
 
 func (c Config) GetShowPullResults() bool {
@@ -40,12 +39,6 @@ func (c Config) GetMaxCommitsPerRepo() int {
 	return c.MaxCommitsPerRepo
 }
 
-func (c Config) GetFetchDelayMs() int {
-	if c.FetchDelayMs <= 0 {
-		return 50 // default 50ms
-	}
-	return c.FetchDelayMs
-}
 
 // GroupsFile represents the groups storage format
 type GroupsFile struct {

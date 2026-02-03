@@ -218,11 +218,3 @@ type PullResultInfo struct {
 type pullResultsReadyMsg struct {
 	results []PullResultInfo
 }
-
-// Progress tracking messages
-type progressTickMsg struct{}
-
-type batchOperationMsg struct {
-	paths     []string // remaining paths to process
-	operation string   // "fetch" or "pull"
-}
