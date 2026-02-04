@@ -347,18 +347,10 @@ func (m model) View() string {
 		status = m.spinner.View() + " Scanning for repositories..."
 	} else if m.pulling {
 		// Show progress bar for pull operations
-		percent := 0
-		if m.progressTotal > 0 {
-			percent = (m.progressDone * 100) / m.progressTotal
-		}
-		status = m.spinner.View() + " " + m.statusMsg + " " + m.progress.View() + fmt.Sprintf(" %d%%", percent)
+		status = m.spinner.View() + " " + m.statusMsg + " " + m.progress.View()
 	} else if m.batchOp == "fetch" && m.progressTotal > 0 {
 		// Show progress bar for fetch operations
-		percent := 0
-		if m.progressTotal > 0 {
-			percent = (m.progressDone * 100) / m.progressTotal
-		}
-		status = m.statusMsg + " " + m.progress.View() + fmt.Sprintf(" %d%%", percent)
+		status = m.statusMsg + " " + m.progress.View()
 	} else if m.errorMsg != "" {
 		status = statusErrorStyle.Render(m.errorMsg)
 	} else if m.statusMsg != "" {
