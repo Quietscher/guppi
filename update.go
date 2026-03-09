@@ -663,19 +663,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Inside a group: pull all repos in that group
 			if m.currentGroup != nil {
 				repos := m.getGroupRepos(m.currentGroup.Name)
-				var pullCmds []tea.Cmd
-				for _, repo := range repos {
-					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
-					pullCmds = append(pullCmds, pullRepo(repo.Path))
-				}
-				if len(pullCmds) > 0 {
-					m.pulling = true
-					m.batchOp = "pull"
-					m.progressTotal = len(pullCmds)
-					m.progressDone = 0
-					m.statusMsg = fmt.Sprintf("Pulling %d repos in %s...", len(pullCmds), m.currentGroup.Name)
-					pullCmds = append(pullCmds, m.spinner.Tick, m.progress.SetPercent(0))
-					return m, tea.Batch(pullCmds...)
+				if batchCmds := m.startPullBatch(repos, fmt.Sprintf("Pulling %d repos in %s...", len(repos), m.currentGroup.Name)); len(batchCmds) > 0 {
+					return m, tea.Batch(batchCmds...)
 				}
 				m.statusMsg = "No repos to pull in " + m.currentGroup.Name
 				return m, nil
@@ -683,39 +672,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// On homepage with a group selected: pull all repos in that group
 			if group, ok := m.list.SelectedItem().(GroupItem); ok {
 				repos := m.getGroupRepos(group.Name)
-				var pullCmds []tea.Cmd
-				for _, repo := range repos {
-					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
-					pullCmds = append(pullCmds, pullRepo(repo.Path))
-				}
-				if len(pullCmds) > 0 {
-					m.pulling = true
-					m.batchOp = "pull"
-					m.progressTotal = len(pullCmds)
-					m.progressDone = 0
-					m.statusMsg = fmt.Sprintf("Pulling %d repos in %s...", len(pullCmds), group.Name)
-					pullCmds = append(pullCmds, m.spinner.Tick, m.progress.SetPercent(0))
-					return m, tea.Batch(pullCmds...)
+				if batchCmds := m.startPullBatch(repos, fmt.Sprintf("Pulling %d repos in %s...", len(repos), group.Name)); len(batchCmds) > 0 {
+					return m, tea.Batch(batchCmds...)
 				}
 				m.statusMsg = "No repos to pull in " + group.Name
 				return m, nil
 			}
 			// Otherwise: pull all favorites
-			var pullCmds []tea.Cmd
+			var favRepos []Repo
 			for _, repo := range m.repos {
 				if repo.IsFavorite {
-					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
-					pullCmds = append(pullCmds, pullRepo(repo.Path))
+					favRepos = append(favRepos, repo)
 				}
 			}
-			if len(pullCmds) > 0 {
-				m.pulling = true
-				m.batchOp = "pull"
-				m.progressTotal = len(pullCmds)
-				m.progressDone = 0
-				m.statusMsg = fmt.Sprintf("Pulling %d favorites...", len(pullCmds))
-				pullCmds = append(pullCmds, m.spinner.Tick, m.progress.SetPercent(0))
-				return m, tea.Batch(pullCmds...)
+			if batchCmds := m.startPullBatch(favRepos, fmt.Sprintf("Pulling %d favorites...", len(favRepos))); len(batchCmds) > 0 {
+				return m, tea.Batch(batchCmds...)
 			}
 
 		case "r":
@@ -725,54 +696,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case FetchOnDemand:
 					// Only refresh selected repo
 					if item, ok := m.list.SelectedItem().(Repo); ok {
-						m.statusMsg = fmt.Sprintf("Refreshing %s (1 repo)...", item.Name)
-						m.batchOp = "fetch"
-						m.progressTotal = 1
-						m.progressDone = 0
-						return m, tea.Batch(m.progress.SetPercent(0), checkGitStatus(item.Path))
+						if batchCmds := m.startFetchBatch([]string{item.Path}, fmt.Sprintf("Refreshing %s (1 repo)...", item.Name)); len(batchCmds) > 0 {
+							return m, tea.Batch(batchCmds...)
+						}
 					}
 					return m, nil
 				case FetchFavorites:
 					// Refresh all favorites + all repos in current group
 					refreshed := make(map[string]bool)
-					var cmds []tea.Cmd
-					// Add all favorites
+					var paths []string
 					for _, repo := range m.repos {
 						if repo.IsFavorite {
-							cmds = append(cmds, checkGitStatus(repo.Path))
+							paths = append(paths, repo.Path)
 							refreshed[repo.Path] = true
 						}
 					}
-					// Add repos in current group (if not already added)
 					groupRepos := m.getGroupRepos(m.currentGroup.Name)
 					for _, repo := range groupRepos {
 						if !refreshed[repo.Path] {
-							cmds = append(cmds, checkGitStatus(repo.Path))
+							paths = append(paths, repo.Path)
 						}
 					}
-					if len(cmds) > 0 {
-						m.batchOp = "fetch"
-						m.progressTotal = len(cmds)
-						m.progressDone = 0
-						m.statusMsg = fmt.Sprintf("Refreshing favorites + %s (%d repos)...", m.currentGroup.Name, len(cmds))
-						cmds = append(cmds, m.progress.SetPercent(0))
-						return m, tea.Batch(cmds...)
+					if batchCmds := m.startFetchBatch(paths, fmt.Sprintf("Refreshing favorites + %s (%d repos)...", m.currentGroup.Name, len(paths))); len(batchCmds) > 0 {
+						return m, tea.Batch(batchCmds...)
 					}
 					m.statusMsg = "No repos to refresh"
 					return m, nil
 				default: // FetchAll
 					repos := m.getGroupRepos(m.currentGroup.Name)
-					var cmds []tea.Cmd
+					var paths []string
 					for _, repo := range repos {
-						cmds = append(cmds, checkGitStatus(repo.Path))
+						paths = append(paths, repo.Path)
 					}
-					if len(cmds) > 0 {
-						m.batchOp = "fetch"
-						m.progressTotal = len(cmds)
-						m.progressDone = 0
-						m.statusMsg = fmt.Sprintf("Refreshing %d repos in %s...", len(cmds), m.currentGroup.Name)
-						cmds = append(cmds, m.progress.SetPercent(0))
-						return m, tea.Batch(cmds...)
+					if batchCmds := m.startFetchBatch(paths, fmt.Sprintf("Refreshing %d repos in %s...", len(paths), m.currentGroup.Name)); len(batchCmds) > 0 {
+						return m, tea.Batch(batchCmds...)
 					}
 					m.statusMsg = "No repos to refresh in " + m.currentGroup.Name
 					return m, nil
@@ -781,17 +738,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// On homepage with a group selected: refresh all repos in that group
 			if group, ok := m.list.SelectedItem().(GroupItem); ok {
 				repos := m.getGroupRepos(group.Name)
-				var cmds []tea.Cmd
+				var paths []string
 				for _, repo := range repos {
-					cmds = append(cmds, checkGitStatus(repo.Path))
+					paths = append(paths, repo.Path)
 				}
-				if len(cmds) > 0 {
-					m.batchOp = "fetch"
-					m.progressTotal = len(cmds)
-					m.progressDone = 0
-					m.statusMsg = fmt.Sprintf("Refreshing %d repos in %s...", len(cmds), group.Name)
-					cmds = append(cmds, m.progress.SetPercent(0))
-					return m, tea.Batch(cmds...)
+				if batchCmds := m.startFetchBatch(paths, fmt.Sprintf("Refreshing %d repos in %s...", len(paths), group.Name)); len(batchCmds) > 0 {
+					return m, tea.Batch(batchCmds...)
 				}
 				m.statusMsg = "No repos to refresh in " + group.Name
 				return m, nil
@@ -799,37 +751,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.fetchMode {
 			case FetchOnDemand:
 				if item, ok := m.list.SelectedItem().(Repo); ok {
-					m.statusMsg = fmt.Sprintf("Refreshing %s (1 repo)...", item.Name)
-					m.batchOp = "fetch"
-					m.progressTotal = 1
-					m.progressDone = 0
-					return m, tea.Batch(m.progress.SetPercent(0), checkGitStatus(item.Path))
+					if batchCmds := m.startFetchBatch([]string{item.Path}, fmt.Sprintf("Refreshing %s (1 repo)...", item.Name)); len(batchCmds) > 0 {
+						return m, tea.Batch(batchCmds...)
+					}
 				}
 				return m, nil
 			case FetchFavorites:
-				// Refresh all favorites + selected item
 				refreshed := make(map[string]bool)
-				var cmds []tea.Cmd
-				// Add all favorites
+				var paths []string
 				for _, repo := range m.repos {
 					if repo.IsFavorite {
-						cmds = append(cmds, checkGitStatus(repo.Path))
+						paths = append(paths, repo.Path)
 						refreshed[repo.Path] = true
 					}
 				}
-				// Add selected repo if not already a favorite
 				if item, ok := m.list.SelectedItem().(Repo); ok {
 					if !refreshed[item.Path] {
-						cmds = append(cmds, checkGitStatus(item.Path))
+						paths = append(paths, item.Path)
 					}
 				}
-				if len(cmds) > 0 {
-					m.batchOp = "fetch"
-					m.progressTotal = len(cmds)
-					m.progressDone = 0
-					m.statusMsg = fmt.Sprintf("Refreshing favorites + selected (%d repos)...", len(cmds))
-					cmds = append(cmds, m.progress.SetPercent(0))
-					return m, tea.Batch(cmds...)
+				if batchCmds := m.startFetchBatch(paths, fmt.Sprintf("Refreshing favorites + selected (%d repos)...", len(paths))); len(batchCmds) > 0 {
+					return m, tea.Batch(batchCmds...)
 				}
 				m.statusMsg = "No repos to refresh"
 				return m, nil
@@ -848,17 +790,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Inside a group: refresh all repos in the group
 			if m.currentGroup != nil {
 				repos := m.getGroupRepos(m.currentGroup.Name)
-				var cmds []tea.Cmd
+				var paths []string
 				for _, repo := range repos {
-					cmds = append(cmds, checkGitStatus(repo.Path))
+					paths = append(paths, repo.Path)
 				}
-				if len(cmds) > 0 {
-					m.batchOp = "fetch"
-					m.progressTotal = len(cmds)
-					m.progressDone = 0
-					m.statusMsg = fmt.Sprintf("Refreshing all %d repos in %s...", len(cmds), m.currentGroup.Name)
-					cmds = append(cmds, m.progress.SetPercent(0))
-					return m, tea.Batch(cmds...)
+				if batchCmds := m.startFetchBatch(paths, fmt.Sprintf("Refreshing all %d repos in %s...", len(paths), m.currentGroup.Name)); len(batchCmds) > 0 {
+					return m, tea.Batch(batchCmds...)
 				}
 				m.statusMsg = "No repos to refresh in " + m.currentGroup.Name
 				return m, nil
@@ -960,21 +897,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingPulls = make(map[string]string)
 
 			filtered := m.getFilteredRepos()
-			var pullCmds []tea.Cmd
+			var behindRepos []Repo
 			for _, repo := range filtered {
 				if repo.BehindCount > 0 {
-					m.pendingPulls[repo.Path] = getHeadCommit(repo.Path)
-					pullCmds = append(pullCmds, pullRepo(repo.Path))
+					behindRepos = append(behindRepos, repo)
 				}
 			}
-			if len(pullCmds) > 0 {
-				m.pulling = true
-				m.batchOp = "pull"
-				m.progressTotal = len(pullCmds)
-				m.progressDone = 0
-				m.statusMsg = fmt.Sprintf("Pulling %d repos behind remote...", len(pullCmds))
-				pullCmds = append(pullCmds, m.spinner.Tick, m.progress.SetPercent(0))
-				return m, tea.Batch(pullCmds...)
+			if batchCmds := m.startPullBatch(behindRepos, fmt.Sprintf("Pulling %d repos behind remote...", len(behindRepos))); len(batchCmds) > 0 {
+				return m, tea.Batch(batchCmds...)
 			} else {
 				m.statusMsg = "No repos behind remote to pull"
 			}
@@ -1097,11 +1027,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.savedFilter = ""
 		}
 
-		var statusCmds []tea.Cmd
+		var fetchPaths []string
 		if m.forceFullFetch {
 			m.forceFullFetch = false
 			for _, repo := range m.repos {
-				statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+				fetchPaths = append(fetchPaths, repo.Path)
 			}
 		} else {
 			switch m.fetchMode {
@@ -1110,22 +1040,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case FetchFavorites:
 				for _, repo := range m.repos {
 					if repo.IsFavorite {
-						statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+						fetchPaths = append(fetchPaths, repo.Path)
 					}
 				}
 			default:
 				for _, repo := range m.repos {
-					statusCmds = append(statusCmds, checkGitStatus(repo.Path))
+					fetchPaths = append(fetchPaths, repo.Path)
 				}
 			}
 		}
-		if len(statusCmds) > 0 {
-			m.batchOp = "fetch"
-			m.progressTotal = len(statusCmds)
-			m.progressDone = 0
-			m.statusMsg = fmt.Sprintf("Fetching status for %d repos...", len(statusCmds))
-			statusCmds = append(statusCmds, m.progress.SetPercent(0))
-			cmds = append(cmds, tea.Batch(statusCmds...))
+		if batchCmds := m.startFetchBatch(fetchPaths, fmt.Sprintf("Fetching status for %d repos...", len(fetchPaths))); len(batchCmds) > 0 {
+			cmds = append(cmds, batchCmds...)
 		}
 
 	case statusUpdatedMsg:
@@ -1145,12 +1070,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			percent := float64(m.progressDone) / float64(m.progressTotal)
 			cmds = append(cmds, m.progress.SetPercent(percent))
 
+			// Dequeue next fetch operation
+			if m.fetchQueue != nil {
+				if next, ok := m.fetchQueue.Next(); ok {
+					cmds = append(cmds, checkGitStatus(next))
+				}
+			}
+
 			// Check if batch is complete
 			if m.progressDone >= m.progressTotal {
 				m.batchOp = ""
 				m.statusMsg = fmt.Sprintf("Refreshed %d repos", m.progressTotal)
 				m.progressTotal = 0
 				m.progressDone = 0
+				m.fetchQueue = nil
 			}
 		}
 
@@ -1207,6 +1140,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.progressDone++
 			percent := float64(m.progressDone) / float64(m.progressTotal)
 			cmds = append(cmds, m.progress.SetPercent(percent))
+
+			// Dequeue next pull operation
+			if m.pullQueue != nil {
+				if next, ok := m.pullQueue.Next(); ok {
+					cmds = append(cmds, pullRepo(next))
+				}
+			}
 		}
 
 		// Check if all pulls are done
@@ -1235,6 +1175,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if allDone {
 				m.pulling = false
 				m.batchOp = ""
+				m.pullQueue = nil
 				// Show results screen if enabled and there are results
 				if m.showPullResults && len(m.pullResults) > 0 {
 					m.mode = pullResultsView

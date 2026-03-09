@@ -20,6 +20,7 @@ A terminal UI for managing multiple git repositories.
 - **Lazygit Integration** - Open lazygit for any repo with one keypress
 - **Goto Feature** - Press `g` to cd into a repo directory
 - **Performance Settings** - Configurable on-demand fetching for large repo collections
+- **Concurrency Limiting** - Batch operations (fetch/pull) run max 10 at a time to prevent network saturation
 
 ## Installation
 
@@ -159,6 +160,7 @@ Configuration is stored in `~/.config/guppi/`:
 
 - `config.json` - Settings (git directory, performance options)
 - `favorites.json` - List of favorite repositories
+- `groups.json` - Custom repository groups
 
 ### Fetch Mode Settings
 

@@ -13,26 +13,26 @@ import (
 )
 
 type model struct {
-	list         list.Model
-	delegate     *repoDelegate
-	repos        []Repo
-	favorites    map[string]bool
-	scanning     bool
-	pulling      bool
-	spinner      spinner.Model
-	statusMsg    string
-	errorMsg     string
-	width        int
-	height       int
-	gitDir       string
-	mode         viewMode
-	previousMode viewMode // for returning from error view
-	savedFilter  string   // saved filter text for restoring after error
-	detailRepo   *Repo
+	list          list.Model
+	delegate      *repoDelegate
+	repos         []Repo
+	favorites     map[string]bool
+	scanning      bool
+	pulling       bool
+	spinner       spinner.Model
+	statusMsg     string
+	errorMsg      string
+	width         int
+	height        int
+	gitDir        string
+	mode          viewMode
+	previousMode  viewMode // for returning from error view
+	savedFilter   string   // saved filter text for restoring after error
+	detailRepo    *Repo
 	detailContent string
-	viewport     viewport.Model
-	dirInput     textinput.Model
-	gotoPath     string // path to cd to after exit
+	viewport      viewport.Model
+	dirInput      textinput.Model
+	gotoPath      string // path to cd to after exit
 
 	// Branch switching
 	branches     []BranchInfo
@@ -69,18 +69,22 @@ type model struct {
 	ungroupedRepos []Repo            // repos not in current group for picker
 
 	// Pull results view
-	pullResults       []PullResultInfo       // results from last pull operation
-	pullResultsCursor PullResultsCursor      // cursor position in tree (level, repo, commit, file)
+	pullResults       []PullResultInfo        // results from last pull operation
+	pullResultsCursor PullResultsCursor       // cursor position in tree (level, repo, commit, file)
 	filesCache        map[string][]FileChange // cache of files per commit (key: "repoPath:commitHash")
-	pendingPulls      map[string]string      // path -> HEAD before pull (for tracking commits)
-	showPullResults   bool                   // config: show results screen
-	maxCommitsPerRepo int                    // config: max commits shown per repo
+	pendingPulls      map[string]string       // path -> HEAD before pull (for tracking commits)
+	showPullResults   bool                    // config: show results screen
+	maxCommitsPerRepo int                     // config: max commits shown per repo
 
 	// Progress tracking
 	progress      progress.Model // progress bar
 	progressTotal int            // total operations in current batch
 	progressDone  int            // completed operations
 	batchOp       string         // current batch operation type ("fetch" or "pull")
+
+	// Concurrency-limited queues for batch operations
+	fetchQueue *batchQueue
+	pullQueue  *batchQueue
 }
 
 func initialModel(gitDir string) model {
@@ -405,6 +409,56 @@ func (m *model) getFilteredRepos() []Repo {
 		filtered = append(filtered, repo)
 	}
 	return filtered
+}
+
+// startFetchBatch starts a concurrency-limited batch fetch operation.
+// Returns the tea.Cmds to kick off the first batch.
+func (m *model) startFetchBatch(paths []string, statusMessage string) []tea.Cmd {
+	if len(paths) == 0 {
+		return nil
+	}
+	q := newBatchQueue(paths, maxConcurrentOps)
+	m.fetchQueue = &q
+	m.batchOp = "fetch"
+	m.progressTotal = len(paths)
+	m.progressDone = 0
+	m.statusMsg = statusMessage
+
+	initial := q.Start()
+	cmds := make([]tea.Cmd, 0, len(initial)+1)
+	for _, p := range initial {
+		cmds = append(cmds, checkGitStatus(p))
+	}
+	cmds = append(cmds, m.progress.SetPercent(0))
+	return cmds
+}
+
+// startPullBatch starts a concurrency-limited batch pull operation.
+// Returns the tea.Cmds to kick off the first batch.
+func (m *model) startPullBatch(repos []Repo, statusMessage string) []tea.Cmd {
+	if len(repos) == 0 {
+		return nil
+	}
+	paths := make([]string, len(repos))
+	for i, r := range repos {
+		paths[i] = r.Path
+		m.pendingPulls[r.Path] = getHeadCommit(r.Path)
+	}
+	q := newBatchQueue(paths, maxConcurrentOps)
+	m.pullQueue = &q
+	m.pulling = true
+	m.batchOp = "pull"
+	m.progressTotal = len(paths)
+	m.progressDone = 0
+	m.statusMsg = statusMessage
+
+	initial := q.Start()
+	cmds := make([]tea.Cmd, 0, len(initial)+2)
+	for _, p := range initial {
+		cmds = append(cmds, pullRepo(p))
+	}
+	cmds = append(cmds, m.spinner.Tick, m.progress.SetPercent(0))
+	return cmds
 }
 
 // getPullResultsMaxItems returns the number of items at the current cursor level
